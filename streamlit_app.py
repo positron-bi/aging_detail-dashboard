@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import pandas as pd
 import streamlit as st
@@ -17,8 +18,8 @@ if clicked or st.session_state.report is None:
     with st.spinner("در حال خواندن فکت و ساخت گزارش…"):
         if uploaded: records=parse_upload(uploaded.getvalue())
         else:
-            source=Path(__file__).with_name("FactFinnance1.xlsx")
-            if not source.exists(): st.error("فایل FactFinnance1.xlsx کنار برنامه پیدا نشد."); st.stop()
+            source=Path(os.environ.get("FACT_FINANCE_PATH",r"C:\Users\a.farshchian\Desktop\AR_Aging_Report\FactFinnance1.xlsx"))
+            if not source.exists(): st.error("فایل فکت محلی پیدا نشد؛ مسیر FACT_FINANCE_PATH را تنظیم یا فایل را آپلود کنید."); st.stop()
             records=parse_default(str(source),source.stat().st_mtime)
         st.session_state.report=analyze(records,int(year),int(month))
 report=st.session_state.report
