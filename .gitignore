@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+_verification_report.xlsx
+.streamlit/secrets.toml
