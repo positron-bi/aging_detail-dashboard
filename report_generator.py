@@ -23,7 +23,7 @@ except ModuleNotFoundError:  # The fallback keeps the CLI usable on a clean Pyth
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 MILLION_TOMAN_RIAL = 10_000_000
-COMPANY_NAMES = {"10": "الماس", "20": "گسترش", "30": "پارس", "40": "رهجو", "50": "سیمرغ"}
+COMPANY_NAMES = {"10": "پارس", "20": "الماس", "30": "تمدن", "40": "سیمرغ", "50": "رهجو"}
 AR_RE = re.compile(r"حساب\s*های?\s*دریافتنی.*تجاری|حسابهای\s*دریافتنی.*تجاری", re.I)
 DOC_RE = re.compile(r"اسناد\s*(?:تجاری\s*)?دریافتنی", re.I)
 BANK_RE = re.compile(r"بانک|موجودی ریالی نزد بانک|واسط.*بانک|کارتخوان|درگاه|وجوه در راه|POS", re.I)
