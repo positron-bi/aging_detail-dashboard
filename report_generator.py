@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Iterable
 from xml.etree import ElementTree as ET
 
-import xlsxwriter
+try:
+    import xlsxwriter
+except ModuleNotFoundError:  # The fallback keeps the CLI usable on a clean Python install.
+    xlsxwriter = None
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 MILLION_TOMAN_RIAL = 10_000_000
@@ -239,7 +242,52 @@ def analyze(records: list[Row], year: int, month: int) -> dict:
 def _to_million(value): return value/MILLION_TOMAN_RIAL if isinstance(value,(int,float)) else value
 
 
+def _build_workbook_openpyxl(result: dict) -> bytes:
+    """Small dependency-free fallback using the openpyxl package."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook(); wb.remove(wb.active)
+    month_fa = str(result["month"]).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    summary_name, sales_name = "خلاصه ح.د و وصول", f"ریز ح.د فروش ماه {month_fa}"
+    sheets = [
+        (summary_name,["شرکت","تفصیل",f"مانده ح.د اول ماه {month_fa}",f"ح.د بدهکار فروش ماه {month_fa}",f"ح.د بستانکار فروش ماه {month_fa}",f"ح.د خالص فروش ماه {month_fa}","وصول مستقیم ح.د → بانک/واسط","ح.د → اسناد دریافتنی","ح.د → نقد/صندوق","سایر تسویه ح.د","جمع وصول مشتری (بانک + اسناد)","وصول از مانده قبل (FIFO)",f"وصول از فروش ماه {month_fa}",f"مانده ح.د فروش ماه {month_fa}","وصول اسناد → بانک","از وصول اسناد: قدیمی",f"از وصول اسناد: ماه {month_fa}","از وصول اسناد: منشأ نامشخص","لینک ریز فروش","لینک ریز وصول","لینک وصول اسناد"],result["summary"]),
+        (sales_name,["شرکت","تفصیل","تاریخ","شماره سند/عطف","ردیف سند","بدهکار ح.د (میلیون تومان)","بستانکار ح.د (میلیون تومان)","حساب معین","شرح"],result["sales"]),
+        ("ریز وصول ح.د",["شرکت","تفصیل","تاریخ","شماره سند/عطف","ردیف ح.د","نوع طرف","بستانکار ح.د","ردیف طرف","مبلغ تخصیص‌یافته","بدهکار طرف","حساب طرف","تفصیل طرف","شرح ح.د","شرح طرف","روش لینک","اختلاف"],result["receipts"]),
+        ("ریز وصول اسناد",["شرکت","تفصیل مشتری","تاریخ وصول","شماره سند/عطف","ردیف اسناد","مبلغ وصول اسناد","ردیف بانک","بدهکار بانک","حساب اسناد","حساب بانک","شرح اسناد","شرح بانک","تاریخ دریافت اولیه","سند دریافت اولیه","مبنای شناسایی مشتری","دسته"],result["docs"]),
+        ("استثناها",["نوع استثنا","شرکت","تفصیل","تاریخ","شماره سند/عطف","ردیف سند","مبلغ","حساب","شرح"],result["exceptions"])]
+    header_fill = PatternFill("solid", fgColor="173A5E"); header_font = Font(bold=True,color="FFFFFF")
+    first_rows = {}
+    for name, columns, rows in sheets:
+        ws=wb.create_sheet(name[:31]); ws.sheet_view.rightToLeft=True; ws.freeze_panes="C2"; ws.auto_filter.ref=f"A1:{get_column_letter(len(columns))}{max(1,len(rows)+1)}"; first_rows[name]={}
+        for col,label in enumerate(columns,1):
+            c=ws.cell(1,col,label); c.fill=header_fill; c.font=header_font; c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+        for ridx,row in enumerate(rows,2):
+            if len(row)>1:first_rows[name].setdefault((row[0],row[1]),ridx)
+            for col,value in enumerate(row,1):
+                monetary=(name==summary_name and 3<=col<=18) or (name==sales_name and col in (6,7)) or (name=="ریز وصول ح.د" and col in (7,9,10,16)) or (name=="ریز وصول اسناد" and col in (6,8)) or (name=="استثناها" and col==7)
+                cell=ws.cell(ridx,col,_to_million(value) if monetary else value); cell.alignment=Alignment(vertical="top",wrap_text=False); cell.number_format="#,##0.000;[Red]-#,##0.000" if monetary else "General"
+        for i in range(1,len(columns)+1): ws.column_dimensions[get_column_letter(i)].width=34 if i==2 else 18
+    ws=wb.create_sheet("کنترل گزارش"); ws.sheet_view.rightToLeft=True
+    controls=[["مانده خالص ح.د اول دوره",sum(r[2] for r in result["summary"]),"جمع مانده حساب‌های دریافتنی تجاری قبل از ماه"],["ح.د بدهکار سند فروش",sum(r[3] for r in result["summary"]),"ردیف‌های فکت دارای قرینه فروش/فاکتور"],["ح.د بستانکار سند فروش",sum(r[4] for r in result["summary"]),"برگشت/تعدیل در ردیف‌های فروش"],["ح.د خالص طرف فروش",sum(r[5] for r in result["summary"]),"بدهکار منهای بستانکار"],["وصول مستقیم بانک/واسط",sum(r[6] for r in result["summary"]),"تطبیق شرکت + تاریخ + شرح"],["ح.د → اسناد دریافتنی",sum(r[7] for r in result["summary"]),"دریافت چک از مشتری"],["ح.د → نقد/صندوق",sum(r[8] for r in result["summary"]),"وصول نقدی"],["سایر تسویه/انتقال ح.د",sum(r[9] for r in result["summary"]),"طرف غیر بانکی یا نامشخص"],["وصول اسناد → بانک",sum(r[14] for r in result["summary"]),"نقدشدن چک؛ وصول جدید مشتری نیست"],["تعداد استثناها",len(result["exceptions"]),"موارد غیرقطعی حذف نشده‌اند"]]
+    headers=["کنترل","مبلغ (میلیون تومان)","توضیح"]
+    for col,label in enumerate(headers,1): c=ws.cell(1,col,label); c.fill=header_fill; c.font=header_font
+    for r,row in enumerate(controls,2): ws.cell(r,1,row[0]); ws.cell(r,2,_to_million(row[1]) if r<11 else row[1]); ws.cell(r,3,row[2])
+    source=wb.create_sheet("منبع گردش کل"); source.sheet_view.rightToLeft=True
+    for col,label in enumerate(["منبع","فایل منبع کامل","توضیح"],1): c=source.cell(1,col,label); c.fill=header_fill; c.font=header_font
+    source.append(["FactFinance","FactFinnance1.xlsx","فکت منبع؛ FinID به‌عنوان ردیف قابل ردیابی حفظ شده است"]); source.append(["محدودیت","شماره سند/عطف در فکت موجود نیست","شماره ساختگی تولید نشده و موارد غیرقطعی در استثناها آمده‌اند"])
+    summary_ws=wb[summary_name]
+    for ridx,row in enumerate(result["summary"],2):
+        for col,detail_sheet,title in [(19,sales_name,"مشاهده فروش"),(20,"ریز وصول ح.د","مشاهده وصول"),(21,"ریز وصول اسناد","مشاهده اسناد")]:
+            target=first_rows.get(detail_sheet,{}).get((row[0],row[1]))
+            if target: summary_ws.cell(ridx,col,title).hyperlink=f"#'{detail_sheet}'!A{target}"; summary_ws.cell(ridx,col).style="Hyperlink"
+    output=io.BytesIO(); wb.save(output); return output.getvalue()
+
+
 def build_workbook(result: dict) -> bytes:
+    if xlsxwriter is None:
+        return _build_workbook_openpyxl(result)
     output=io.BytesIO(); wb=xlsxwriter.Workbook(output,{"in_memory":True})
     header=wb.add_format({"bold":True,"font_color":"white","bg_color":"#173A5E","border":1,"align":"center","valign":"vcenter"})
     text_fmt=wb.add_format({"border":1,"align":"right","valign":"top"}); num_fmt=wb.add_format({"border":1,"num_format":"#,##0.000;[Red]-#,##0.000","align":"left"}); link_fmt=wb.add_format({"font_color":"#0563C1","underline":True,"border":1})

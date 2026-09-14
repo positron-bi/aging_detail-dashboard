@@ -9,6 +9,8 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
+`XlsxWriter` اختیاری است؛ اگر نصب نباشد، برنامه به‌صورت خودکار از `openpyxl` استفاده می‌کند.
+
 مسیر پیش‌فرض فکت محلی:
 
 ```text
