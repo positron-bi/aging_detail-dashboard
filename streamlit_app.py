@@ -2,11 +2,12 @@ import os
 from pathlib import Path
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 from report_generator import analyze, build_workbook, load_source
 
 st.set_page_config(page_title="گزارش حساب‌های دریافتنی و وصول",page_icon="📊",layout="wide")
 st.markdown("<style>html,body,[class*='css']{direction:rtl;text-align:right;font-family:Tahoma,sans-serif}[data-testid='stMetricValue']{direction:ltr;text-align:right}.block-container{padding-top:2rem}</style>",unsafe_allow_html=True)
-st.title("گزارش حساب‌های دریافتنی و وصول"); st.caption("خروجی مطابق الگوی گزارش پنج شرکت؛ منبع پیش‌فرض FactFinnance1.xlsx")
+st.title("گزارش حساب‌های دریافتنی و وصول"); st.caption(f"خروجی مطابق الگوی گزارش پنج شرکت · آخرین بروزرسانی برنامه: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 with st.sidebar:
     st.header("تنظیمات گزارش"); uploaded=st.file_uploader("فکت جایگزین",type=["xlsx"],help="در صورت عدم انتخاب، فایل همراه پروژه خوانده می‌شود."); year=st.number_input("سال شمسی",1300,1500,1405); month=st.number_input("ماه",1,12,6); clicked=st.button("تولید گزارش",type="primary",use_container_width=True)
 @st.cache_data(show_spinner=False)
